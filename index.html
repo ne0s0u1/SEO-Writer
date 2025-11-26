@@ -627,8 +627,8 @@ async function runGenerator() {
     if (!payload) return;
 
     el.generateBtn.disabled = true;
-    el.generateBtn.innerHTML = `<i data-lucide="loader-2" class="w-5 h-5 animate-spin"></i> 正在请求 Worker...`;
-    el.status.textContent = '正在发送配置到 Cloudflare Worker...';
+    el.generateBtn.innerHTML = `<i data-lucide="loader-2" class="w-5 h-5 animate-spin"></i> 文案生成中...`;
+    el.status.textContent = '...';
     el.outputArea.innerHTML = '';
     el.densityResult.classList.add('hidden');
     el.checkDensityBtn.disabled = true;
@@ -913,6 +913,7 @@ el.checkDensityBtn.addEventListener('click', () => {
 </script>
 </body>
 </html>
+
 
 
 
