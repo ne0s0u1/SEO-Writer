@@ -17,10 +17,17 @@
   body { font-family: 'Inter', sans-serif; }
   .lucide { vertical-align: middle; }
   .custom-scroll { scrollbar-width: thin; scrollbar-color: #cbd5e1 transparent; }
+  
+  /* 禁用数字输入框的箭头 */
+  input[type=number]::-webkit-inner-spin-button, 
+  input[type=number]::-webkit-outer-spin-button { 
+    -webkit-appearance: none; margin: 0; 
+  }
 </style>
 </head>
 <body class="bg-slate-50 h-screen flex flex-col overflow-hidden">
 
+<!-- 背景 (省略重复代码，保持原样) -->
 <div class="fixed inset-0 overflow-hidden pointer-events-none -z-10">
   <div class="absolute top-0 left-0 w-[70vw] h-[70vw] bg-[radial-gradient(circle_at_top_left,rgba(216,180,254,0.3)_0%,transparent_60%)]"></div>
 </div>
@@ -128,7 +135,6 @@ const IMAGE_WORKER_ENDPOINT = 'https://image-worker.ne0s0u1-pd.workers.dev';
 let copyData = {};
 let sectionStates = [];
 
-// 元素引用
 const el = {
     apiKey: document.getElementById('apiKey'),
     stylePrompt: document.getElementById('stylePrompt'),
@@ -139,13 +145,10 @@ const el = {
     resultsArea: document.getElementById('resultsArea'),
 };
 
-// 初始化
 window.addEventListener('DOMContentLoaded', () => {
-    // 加载 Key
     el.apiKey.value = localStorage.getItem("gemini_api_key") || "";
     el.apiKey.addEventListener("input", () => localStorage.setItem("gemini_api_key", el.apiKey.value));
 
-    // 加载数据
     const rawCopy = localStorage.getItem('seo_generated_copy');
     const rawSections = localStorage.getItem('seo_section_states');
 
@@ -182,7 +185,6 @@ function renderConfigList() {
         
         const row = document.createElement('div');
         row.className = "flex items-center justify-between bg-white border border-slate-100 p-2 rounded-lg hover:border-purple-200 transition-colors";
-        // **关键修改**：Select 的值严格使用 1:1, 3:2, 2:3
         row.innerHTML = `
             <div class="flex items-center gap-2">
                 <input type="checkbox" id="check-${sec.id}" class="rounded text-purple-600 focus:ring-purple-500 border-gray-300" checked>
@@ -194,24 +196,25 @@ function renderConfigList() {
                     <option value="3:2">3:2</option>
                     <option value="2:3">2:3</option>
                 </select>
-                <select id="count-${sec.id}" class="text-xs border border-slate-200 rounded px-1 py-1 bg-slate-50 focus:outline-none">
-                    <option value="1">1 张</option>
-                    <option value="2">2 张</option>
-                </select>
+                <!-- 修改：由 Select 改为 Input type number -->
+                <div class="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded px-2 py-1">
+                    <span class="text-xs text-slate-400">张数:</span>
+                    <input id="count-${sec.id}" type="number" value="1" min="1" max="4" class="w-8 text-xs text-center bg-transparent outline-none focus:text-purple-600 font-medium">
+                </div>
             </div>
         `;
         el.sectionConfigList.appendChild(row);
     });
 }
 
-// Step 1: 生成提示词
+// Step 1: 生成提示词 (并发生成多个)
 el.genPromptsBtn.addEventListener('click', async () => {
     const apiKey = el.apiKey.value;
     if (!apiKey) return alert("请输入 API Key");
 
     const selected = sectionStates.filter(s => {
         const cb = document.getElementById(`check-${s.id}`);
-        return s.active && cb && cb.checked;
+        return cb && cb.checked;
     });
 
     if (selected.length === 0) return alert("请至少勾选一个需要配图的 Section");
@@ -220,14 +223,22 @@ el.genPromptsBtn.addEventListener('click', async () => {
     el.genPromptsBtn.innerHTML = `<i data-lucide="loader-2" class="animate-spin w-4 h-4"></i> 生成中...`;
     el.resultsArea.innerHTML = ''; 
 
+    // 逐个 Section 生成 Prompt
     for (const sec of selected) {
         const content = document.getElementById(`text-${sec.id}`).value;
         const style = el.stylePrompt.value;
+        const count = parseInt(document.getElementById(`count-${sec.id}`).value) || 1;
 
+        // 创建结果卡片
         const card = createResultCard(sec.id, sec.label);
         el.resultsArea.appendChild(card);
         
+        const promptContainer = card.querySelector('.prompt-container');
+        const statusText = card.querySelector('.status-text');
+        const statusDot = card.querySelector('.status-dot');
+
         try {
+            // 调用后端生成 N 个 Prompt
             const res = await fetch(IMAGE_WORKER_ENDPOINT, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -236,21 +247,34 @@ el.genPromptsBtn.addEventListener('click', async () => {
                     apiKey,
                     sectionLabel: sec.label,
                     sectionContent: content,
-                    stylePrompt: style
+                    stylePrompt: style,
+                    count: count // 告诉后端需要生成多少个不同的 Prompt
                 })
             });
             const data = await res.json();
             if (data.error) throw new Error(data.error);
 
-            const promptInput = card.querySelector('.prompt-input');
-            promptInput.value = data.prompt;
-            card.querySelector('.status-dot').classList.add('bg-yellow-400');
-            card.querySelector('.status-text').textContent = "提示词就绪";
+            // 渲染 Prompts 输入框
+            promptContainer.innerHTML = '';
+            const prompts = data.prompts || [];
+            
+            prompts.forEach((pText, index) => {
+                const wrapper = document.createElement('div');
+                wrapper.className = "flex gap-2 items-start";
+                wrapper.innerHTML = `
+                    <span class="text-xs text-slate-400 mt-2 w-4 text-center">${index + 1}</span>
+                    <textarea class="prompt-input w-full text-xs text-slate-600 border border-slate-200 rounded p-2 h-16 focus:ring-1 focus:ring-purple-300 outline-none" data-index="${index}">${pText}</textarea>
+                `;
+                promptContainer.appendChild(wrapper);
+            });
+
+            statusDot.classList.add('bg-yellow-400');
+            statusText.textContent = `${prompts.length} 个提示词就绪`;
 
         } catch (e) {
             console.error(e);
-            card.querySelector('.status-text').textContent = "提示词生成失败";
-            card.querySelector('.status-text').classList.add('text-red-500');
+            statusText.textContent = "提示词生成失败: " + e.message;
+            statusText.classList.add('text-red-500');
         }
     }
 
@@ -260,7 +284,7 @@ el.genPromptsBtn.addEventListener('click', async () => {
     lucide.createIcons();
 });
 
-// Step 2: 开始生图
+// Step 2: 开始生图 (并发执行)
 el.startGenImagesBtn.addEventListener('click', async () => {
     const apiKey = el.apiKey.value;
     const cards = document.querySelectorAll('.result-card');
@@ -268,60 +292,81 @@ el.startGenImagesBtn.addEventListener('click', async () => {
     el.startGenImagesBtn.disabled = true;
     el.startGenImagesBtn.innerHTML = `<i data-lucide="loader-2" class="animate-spin w-4 h-4"></i> 正在绘画...`;
 
-    for (const card of cards) {
+    const allPromises = [];
+
+    cards.forEach(card => {
         const secId = card.dataset.id;
-        const prompt = card.querySelector('.prompt-input').value.trim();
-        const count = document.getElementById(`count-${secId}`).value;
-        // 获取前端选中的 size (例如 "3:2")
+        const inputs = card.querySelectorAll('.prompt-input');
         const size = document.getElementById(`ratio-${secId}`).value;
-
-        if (!prompt) continue;
-
         const imgGrid = card.querySelector('.img-grid');
         const statusText = card.querySelector('.status-text');
         const dot = card.querySelector('.status-dot');
 
+        // 重置状态
         statusText.textContent = "正在生成图片...";
         dot.className = "status-dot w-2 h-2 rounded-full bg-purple-500 animate-pulse";
         imgGrid.innerHTML = ''; 
 
-        try {
-            const res = await fetch(IMAGE_WORKER_ENDPOINT, {
+        inputs.forEach((input, idx) => {
+            const prompt = input.value.trim();
+            if (!prompt) return;
+
+            // 每一个 Prompt 发起一个独立的请求
+            const p = fetch(IMAGE_WORKER_ENDPOINT, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     mode: 'image_gen',
                     apiKey,
                     prompt,
-                    n: count,
-                    size: size // 将 "3:2" 直接传给后端
+                    n: 1, // 每次只生成一张
+                    size: size
                 })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.error) throw new Error(data.error);
+                if (data.images) {
+                    data.images.forEach(img => {
+                        const imgEl = document.createElement('div');
+                        imgEl.className = "relative group aspect-square bg-slate-100 rounded-lg overflow-hidden border border-slate-200";
+                        imgEl.innerHTML = `
+                            <img src="${img.url}" class="w-full h-full object-cover" loading="lazy">
+                            <a href="${img.url}" target="_blank" class="absolute bottom-2 right-2 p-1.5 bg-white/90 rounded text-slate-700 opacity-0 group-hover:opacity-100 transition-opacity hover:text-purple-600" title="查看原图">
+                                <i data-lucide="external-link" class="w-4 h-4"></i>
+                            </a>
+                            <div class="absolute top-2 left-2 px-1.5 py-0.5 bg-black/50 rounded text-[10px] text-white backdrop-blur-sm">#${idx+1}</div>
+                        `;
+                        imgGrid.appendChild(imgEl);
+                    });
+                }
+            })
+            .catch(e => {
+                console.error(`Image ${idx+1} failed:`, e);
+                // 可以在界面上显示某个特定的失败，这里简化为整体提示
             });
-            const data = await res.json();
-            if (data.error) throw new Error(data.error);
 
-            data.images.forEach(img => {
-                const imgEl = document.createElement('div');
-                imgEl.className = "relative group aspect-square bg-slate-100 rounded-lg overflow-hidden border border-slate-200";
-                imgEl.innerHTML = `
-                    <img src="${img.url}" class="w-full h-full object-cover" loading="lazy">
-                    <a href="${img.url}" target="_blank" class="absolute bottom-2 right-2 p-1.5 bg-white/90 rounded text-slate-700 opacity-0 group-hover:opacity-100 transition-opacity hover:text-purple-600" title="查看原图">
-                        <i data-lucide="external-link" class="w-4 h-4"></i>
-                    </a>
-                `;
-                imgGrid.appendChild(imgEl);
-            });
+            allPromises.push(p);
+        });
+    });
 
-            statusText.textContent = "完成";
+    // 等待所有并发请求完成
+    await Promise.allSettled(allPromises);
+
+    // 更新最终状态
+    cards.forEach(card => {
+        const statusText = card.querySelector('.status-text');
+        const dot = card.querySelector('.status-dot');
+        const imgCount = card.querySelectorAll('.img-grid img').length;
+        
+        if (imgCount > 0) {
+            statusText.textContent = `完成 (${imgCount} 张)`;
             dot.className = "status-dot w-2 h-2 rounded-full bg-green-500";
-
-        } catch (e) {
-            console.error(e);
-            statusText.textContent = "生图失败: " + e.message;
-            statusText.classList.add('text-red-500');
+        } else {
+            statusText.textContent = "生成失败或部分失败";
             dot.className = "status-dot w-2 h-2 rounded-full bg-red-500";
         }
-    }
+    });
 
     el.startGenImagesBtn.disabled = false;
     el.startGenImagesBtn.innerHTML = `<i data-lucide="palette" class="w-3 h-3"></i> 重新生成图片`;
@@ -340,8 +385,11 @@ function createResultCard(id, label) {
             </div>
             <span class="status-text text-xs text-slate-400">等待提示词...</span>
         </div>
-        <textarea class="prompt-input w-full text-xs text-slate-600 border border-slate-200 rounded p-2 h-16 focus:ring-1 focus:ring-purple-300 outline-none" placeholder="AI 生成的提示词将显示在这里..."></textarea>
-        <div class="img-grid grid grid-cols-2 gap-2"></div>
+        <div class="prompt-container space-y-2">
+            <!-- 动态插入多个 Textarea -->
+            <div class="text-xs text-slate-400 italic">正在生成提示词...</div>
+        </div>
+        <div class="img-grid grid grid-cols-2 md:grid-cols-3 gap-2 mt-3"></div>
     `;
     return div;
 }
