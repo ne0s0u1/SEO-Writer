@@ -265,6 +265,7 @@ const el = {
     outputArea: document.getElementById('outputArea'),
     status: document.getElementById('status'),
     coreKeyword: document.getElementById('coreKeyword'),
+    copyAllBtn: document.getElementById('copyAllBtn'),
     secondaryKeywords: document.getElementById('secondaryKeywords'),
     densityTarget: document.getElementById('densityTarget'),
     brandName: document.getElementById('brandName'),
@@ -964,11 +965,15 @@ el.checkDensityBtn.addEventListener('click', () => {
     displayDensityResult(allText);
 });
 
-  /**
- * 遍历所有生成的文案，并连同 Section 标题一起复制到剪贴板。
+/**
+ * 遍历所有生成的文案，连同 Section 标题一起格式化后复制到剪贴板。
  */
 function copyAllContent() {
-    if (!generatedCopy) return;
+    // 确保有生成结果
+    if (!generatedCopy) {
+        alert("请先生成文案！");
+        return;
+    }
 
     let fullText = "";
 
@@ -976,29 +981,47 @@ function copyAllContent() {
     sectionStates.filter(s => s.active).forEach(sec => {
         const content = generatedCopy[sec.id];
         
+        // 排除掉没有内容的 Section
         if (content) {
-            // 格式化输出：使用 Markdown 标题作为分隔和标签
+            // 使用 Markdown 标题作为分隔和标签，保证结构清晰
             fullText += `\n\n## ${sec.label} Section\n\n`;
-            fullText += content;
+            // 如果内容是对象（例如 SEO Metadata 格式化失败），先转为字符串
+            let contentString = String(content);
+            if (contentString === '[object Object]') {
+                 contentString = JSON.stringify(content, null, 2);
+            }
+            fullText += contentString;
         }
     });
+
+    if (fullText.trim().length === 0) {
+        alert("文案内容为空，无法复制。");
+        return;
+    }
     
-    // 复制到剪贴板
+    // 使用 navigator.clipboard.writeText 复制（这是现代浏览器的推荐方式）
     if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(fullText.trim()).then(() => {
-            // 提示用户复制成功 (可以复用 showCopySuccess 辅助函数)
+            // 提示用户复制成功 (复用 showCopySuccess 辅助函数)
             const btn = document.getElementById('copyAllBtn');
-            // 假设您复用了 showCopySuccess 的逻辑
             showCopySuccess(btn); 
         });
     } else {
         // Fallback 逻辑 (与您已有的 copyText 函数逻辑类似)
-        // ... (省略 fallback 实现)
+        const textArea = document.createElement("textarea");
+        textArea.value = fullText.trim();
+        document.body.appendChild(textArea);
+        textArea.select();
+        document.execCommand("copy");
+        document.body.removeChild(textArea);
+        const btn = document.getElementById('copyAllBtn');
+        showCopySuccess(btn); 
     }
 }
 </script>
 </body>
 </html>
+
 
 
 
