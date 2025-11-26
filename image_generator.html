@@ -131,6 +131,7 @@ lucide.createIcons();
 
 // **请替换为您部署的 新生图 Worker URL**
 const IMAGE_WORKER_ENDPOINT = 'https://image-worker.ne0s0u1-pd.workers.dev'; 
+const POLLING_INTERVAL_MS = 2000; // 2秒检查一次状态
 
 let copyData = {};
 let sectionStates = [];
@@ -194,7 +195,7 @@ function renderConfigList() {
                 <select id="ratio-${sec.id}" class="text-xs border border-slate-200 rounded px-1 py-1 bg-slate-50 focus:outline-none">
                     <option value="1:1">1:1</option>
                     <option value="3:2">3:2</option>
-                    <option value="2:3">2:3</option>
+                    <option value="2:3">2:2</option>
                 </select>
                 <!-- 修改：由 Select 改为 Input type number -->
                 <div class="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded px-2 py-1">
@@ -284,106 +285,185 @@ el.genPromptsBtn.addEventListener('click', async () => {
     lucide.createIcons();
 });
 
+// 辅助函数：处理单个 Task 的轮询
+async function pollTaskForImages(apiKey, taskId, card, index) {
+    const statusText = card.querySelector(`.status-text[data-task-index="${index}"]`);
+    const statusDot = card.querySelector(`.status-dot[data-task-index="${index}"]`);
+    const imgGrid = card.querySelector('.img-grid');
+
+    const updateStatusUI = (text, dotClass = 'bg-purple-500', isAnimated = true) => {
+        statusText.textContent = text;
+        statusDot.className = `status-dot w-2 h-2 rounded-full ${dotClass} ${isAnimated ? 'animate-pulse' : ''}`;
+    };
+
+    let intervalId = null;
+    let attempt = 0;
+    const MAX_ATTEMPTS = 120; // 2秒 * 120次 = 4分钟超时
+
+    return new Promise((resolve, reject) => {
+        intervalId = setInterval(async () => {
+            if (attempt++ > MAX_ATTEMPTS) {
+                clearInterval(intervalId);
+                updateStatusUI(`超时失败 (>${MAX_ATTEMPTS}s)`, 'bg-red-500', false);
+                return reject(new Error("Image generation task timed out in browser."));
+            }
+
+            try {
+                // 1. 调用 Worker 检查状态
+                const res = await fetch(IMAGE_WORKER_ENDPOINT, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        mode: 'check_status',
+                        apiKey,
+                        taskId
+                    })
+                });
+                
+                const data = await res.json();
+
+                if (data.status === 'completed') {
+                    // 2. 成功完成
+                    clearInterval(intervalId);
+                    updateStatusUI(`完成`, 'bg-green-500', false);
+                    resolve(data.images);
+                } else if (data.status === 'failed' || data.status === 'cancelled') {
+                    // 3. 失败
+                    clearInterval(intervalId);
+                    updateStatusUI(`失败: ${data.error || '未知错误'}`, 'bg-red-500', false);
+                    reject(new Error(data.error || 'Task failed.'));
+                } else {
+                    // 4. 处理中
+                    updateStatusUI(`处理中 (${data.progress || 0}%)`, 'bg-purple-500', true);
+                }
+            } catch (e) {
+                clearInterval(intervalId);
+                updateStatusUI(`连接错误: ${e.message}`, 'bg-red-500', false);
+                reject(e);
+            }
+        }, POLLING_INTERVAL_MS);
+    });
+}
+
+
 // Step 2: 开始生图 (并发执行)
 el.startGenImagesBtn.addEventListener('click', async () => {
     const apiKey = el.apiKey.value;
     const cards = document.querySelectorAll('.result-card');
     
     el.startGenImagesBtn.disabled = true;
-    el.startGenImagesBtn.innerHTML = `<i data-lucide="loader-2" class="animate-spin w-4 h-4"></i> 正在绘画...`;
+    el.startGenImagesBtn.innerHTML = `<i data-lucide="loader-2" class="animate-spin w-4 h-4"></i> 正在提交任务...`;
 
-    const allPromises = [];
-
+    const submissionPromises = [];
+    
+    // 1. 提交所有任务并收集 task_ids
     cards.forEach(card => {
         const secId = card.dataset.id;
         const inputs = card.querySelectorAll('.prompt-input');
         const size = document.getElementById(`ratio-${secId}`).value;
-        const imgGrid = card.querySelector('.img-grid');
-        const statusText = card.querySelector('.status-text');
-        const dot = card.querySelector('.status-dot');
-
-        // 重置状态
-        statusText.textContent = "正在生成图片...";
-        dot.className = "status-dot w-2 h-2 rounded-full bg-purple-500 animate-pulse";
-        imgGrid.innerHTML = ''; 
 
         inputs.forEach((input, idx) => {
             const prompt = input.value.trim();
             if (!prompt) return;
+            
+            // 找到对应的状态显示元素
+            const statusText = card.querySelector(`.status-text[data-task-index="${idx}"]`);
+            const statusDot = card.querySelector(`.status-dot[data-task-index="${idx}"]`);
+            
+            // 标记为提交中
+            statusText.textContent = '提交任务中...';
+            statusDot.className = "status-dot w-2 h-2 rounded-full bg-blue-500 animate-pulse";
 
-            // 每一个 Prompt 发起一个独立的请求
-            const p = fetch(IMAGE_WORKER_ENDPOINT, {
+            // 提交任务请求 (只提交，不轮询)
+            const submissionPromise = fetch(IMAGE_WORKER_ENDPOINT, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    mode: 'image_gen',
+                    mode: 'image_gen', // 提交模式
                     apiKey,
                     prompt,
-                    n: 1, // 每次只生成一张
                     size: size
                 })
             })
             .then(res => res.json())
             .then(data => {
                 if (data.error) throw new Error(data.error);
-                if (data.images) {
-                    data.images.forEach(img => {
-                        const imgEl = document.createElement('div');
-                        imgEl.className = "relative group aspect-square bg-slate-100 rounded-lg overflow-hidden border border-slate-200";
-                        imgEl.innerHTML = `
-                            <img src="${img.url}" class="w-full h-full object-cover" loading="lazy">
-                            <a href="${img.url}" target="_blank" class="absolute bottom-2 right-2 p-1.5 bg-white/90 rounded text-slate-700 opacity-0 group-hover:opacity-100 transition-opacity hover:text-purple-600" title="查看原图">
-                                <i data-lucide="external-link" class="w-4 h-4"></i>
-                            </a>
-                            <div class="absolute top-2 left-2 px-1.5 py-0.5 bg-black/50 rounded text-[10px] text-white backdrop-blur-sm">#${idx+1}</div>
-                        `;
-                        imgGrid.appendChild(imgEl);
-                    });
-                }
+                if (!data.taskId) throw new Error("Task ID missing from response.");
+                
+                // 提交成功，开始轮询
+                statusText.textContent = `任务ID: ${data.taskId.substring(0,4)}...`;
+                statusDot.classList.remove('bg-blue-500');
+                statusDot.classList.add('bg-purple-500');
+
+                // 启动浏览器轮询
+                return pollTaskForImages(apiKey, data.taskId, card, idx);
+            })
+            .then(images => {
+                // 轮询成功，渲染图片
+                images.forEach(img => renderImage(card.querySelector('.img-grid'), img.url, idx));
+                statusText.textContent = '完成';
+                statusDot.classList.remove('animate-pulse');
+                statusDot.classList.remove('bg-purple-500');
+                statusDot.classList.add('bg-green-500');
             })
             .catch(e => {
                 console.error(`Image ${idx+1} failed:`, e);
-                // 可以在界面上显示某个特定的失败，这里简化为整体提示
+                statusText.textContent = `失败: ${e.message.substring(0, 40)}`;
+                statusDot.classList.remove('animate-pulse');
+                statusDot.classList.remove('bg-purple-500');
+                statusDot.classList.add('bg-red-500');
             });
-
-            allPromises.push(p);
+            
+            submissionPromises.push(submissionPromise);
         });
     });
 
-    // 等待所有并发请求完成
-    await Promise.allSettled(allPromises);
-
-    // 更新最终状态
-    cards.forEach(card => {
-        const statusText = card.querySelector('.status-text');
-        const dot = card.querySelector('.status-dot');
-        const imgCount = card.querySelectorAll('.img-grid img').length;
-        
-        if (imgCount > 0) {
-            statusText.textContent = `完成 (${imgCount} 张)`;
-            dot.className = "status-dot w-2 h-2 rounded-full bg-green-500";
-        } else {
-            statusText.textContent = "生成失败或部分失败";
-            dot.className = "status-dot w-2 h-2 rounded-full bg-red-500";
-        }
-    });
+    // 2. 等待所有任务完成
+    await Promise.allSettled(submissionPromises);
 
     el.startGenImagesBtn.disabled = false;
     el.startGenImagesBtn.innerHTML = `<i data-lucide="palette" class="w-3 h-3"></i> 重新生成图片`;
     lucide.createIcons();
 });
 
+function renderImage(gridEl, url, index) {
+    const imgEl = document.createElement('div');
+    imgEl.className = "relative group aspect-square bg-slate-100 rounded-lg overflow-hidden border border-slate-200";
+    imgEl.innerHTML = `
+        <img src="${url}" class="w-full h-full object-cover" loading="lazy">
+        <a href="${url}" target="_blank" class="absolute bottom-2 right-2 p-1.5 bg-white/90 rounded text-slate-700 opacity-0 group-hover:opacity-100 transition-opacity hover:text-purple-600" title="查看原图">
+            <i data-lucide="external-link" class="w-4 h-4"></i>
+        </a>
+        <div class="absolute top-2 left-2 px-1.5 py-0.5 bg-black/50 rounded text-[10px] text-white backdrop-blur-sm">#${index+1}</div>
+    `;
+    gridEl.appendChild(imgEl);
+}
+
 function createResultCard(id, label) {
     const div = document.createElement('div');
-    div.className = "result-card bg-slate-50 rounded-xl border border-slate-200 p-4 space-y-3";
+    div.className = "result-card bg-white rounded-xl border border-slate-200 p-4 space-y-3";
     div.dataset.id = id;
-    div.innerHTML = `
-        <div class="flex justify-between items-center">
+    
+    // 创建 N 个状态显示区域（基于张数 input 的值）
+    const count = parseInt(document.getElementById(`count-${id}`).value) || 1;
+    let statusBlocks = '';
+    for (let i = 0; i < count; i++) {
+        statusBlocks += `
             <div class="flex items-center gap-2">
-                <div class="status-dot w-2 h-2 rounded-full bg-slate-300"></div>
-                <span class="text-sm font-bold text-slate-700">${label}</span>
+                <span class="text-xs text-slate-400 w-4 text-center">#${i + 1}</span>
+                <div class="status-dot w-2 h-2 rounded-full bg-slate-300" data-task-index="${i}"></div>
+                <span class="status-text text-xs text-slate-500" data-task-index="${i}">等待提交...</span>
             </div>
-            <span class="status-text text-xs text-slate-400">等待提示词...</span>
+        `;
+    }
+
+    div.innerHTML = `
+        <div class="flex justify-between items-start">
+            <span class="text-sm font-bold text-slate-700">${label}</span>
+            <div class="text-right">
+                <div class="text-xs text-slate-400 mb-1">任务状态:</div>
+                ${statusBlocks}
+            </div>
         </div>
         <div class="prompt-container space-y-2">
             <!-- 动态插入多个 Textarea -->
