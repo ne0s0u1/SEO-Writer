@@ -969,7 +969,6 @@ el.checkDensityBtn.addEventListener('click', () => {
  * 遍历所有生成的文案，连同 Section 标题一起格式化后复制到剪贴板。
  */
 function copyAllContent() {
-    // 确保有生成结果
     if (!generatedCopy) {
         alert("请先生成文案！");
         return;
@@ -981,14 +980,11 @@ function copyAllContent() {
     sectionStates.filter(s => s.active).forEach(sec => {
         const content = generatedCopy[sec.id];
         
-        // 排除掉没有内容的 Section
         if (content) {
-            // 使用 Markdown 标题作为分隔和标签，保证结构清晰
             fullText += `\n\n## ${sec.label} Section\n\n`;
-            // 如果内容是对象（例如 SEO Metadata 格式化失败），先转为字符串
             let contentString = String(content);
             if (contentString === '[object Object]') {
-                 contentString = JSON.stringify(content, null, 2);
+                contentString = JSON.stringify(content, null, 2);
             }
             fullText += contentString;
         }
@@ -999,28 +995,31 @@ function copyAllContent() {
         return;
     }
     
-    // 使用 navigator.clipboard.writeText 复制（这是现代浏览器的推荐方式）
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(fullText.trim()).then(() => {
-            // 提示用户复制成功 (复用 showCopySuccess 辅助函数)
-            const btn = document.getElementById('copyAllBtn');
-            showCopySuccess(btn); 
-        });
-    } else {
-        // Fallback 逻辑 (与您已有的 copyText 函数逻辑类似)
-        const textArea = document.createElement("textarea");
-        textArea.value = fullText.trim();
-        document.body.appendChild(textArea);
-        textArea.select();
-        document.execCommand("copy");
-        document.body.removeChild(textArea);
-        const btn = document.getElementById('copyAllBtn');
-        showCopySuccess(btn); 
-    }
+    // 🔥 统一使用 Fallback 机制：创建隐藏的 Textarea 并执行 copy
+    const textArea = document.createElement("textarea");
+    textArea.value = fullText.trim();
+    // 隐藏元素，但必须在 DOM 中
+    textArea.style.position = 'fixed';
+    textArea.style.top = '0';
+    textArea.style.left = '0';
+    textArea.style.opacity = '0'; 
+
+    document.body.appendChild(textArea);
+    textArea.select();
+    
+    // 执行复制操作 (这是您环境中已知有效的方法)
+    document.execCommand("copy");
+    
+    document.body.removeChild(textArea);
+    
+    // 提示用户复制成功
+    const btn = document.getElementById('copyAllBtn');
+    showCopySuccess(btn); 
 }
 </script>
 </body>
 </html>
+
 
 
 
