@@ -211,15 +211,15 @@ lucide.createIcons();
 const WORKER_ENDPOINT = 'https://seo-writer.ne0s0u1-pd.workers.dev'; 
 
 const SECTION_DEFAULTS = [
-    { id: 'hero', label: 'Hero', active: true },
-    { id: 'showcase', label: 'Showcase', active: false },
-    { id: 'howItWork', label: 'How it Work', active: false },
-    { id: 'howToUse', label: 'How to use', active: false },
-    { id: 'features', label: 'Features', active: true, options: { count: 4, max: 6 }, icon: 'layers-3' },
-    { id: 'whyChooseUs', label: 'Why Choose Us', active: true, options: { count: 3, max: 5 }, icon: 'thumbs-up' },
-    { id: 'whoCanBenefit', label: 'Who Can Benefit', active: true, options: { count: 3, max: 5 }, icon: 'users' },
-    { id: 'faq', label: 'FAQ', active: false, options: { count: 3, max: 10 }, icon: 'help-circle' },
+    { id: 'hero', label: 'Hero', active: false },
+    { id: 'showcase', label: 'Showcase', active: true },
+    { id: 'whyChooseUs', label: 'Why Choose Us', active: true, options: { count: 3, max: 9 }, icon: 'thumbs-up' },
+    { id: 'howItWork', label: 'How it Work', active: true }, 
+    { id: 'features', label: 'Features', active: true, options: { count: 4, max: 9 }, icon: 'layers-3' },
+    { id: 'faq', label: 'FAQ', active: true, options: { count: 5, max: 9 }, icon: 'help-circle' },
     { id: 'cta', label: 'CTA', active: true }
+    { id: 'howToUse', label: 'How to use', active: false },
+    { id: 'whoCanBenefit', label: 'Who Can Benefit', active: false, options: { count: 3, max: 9 }, icon: 'users' },
 ];
 
 let sectionStates = JSON.parse(JSON.stringify(SECTION_DEFAULTS));
@@ -913,5 +913,6 @@ el.checkDensityBtn.addEventListener('click', () => {
 </script>
 </body>
 </html>
+
 
 
