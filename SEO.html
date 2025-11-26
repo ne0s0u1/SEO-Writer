@@ -1,0 +1,898 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>SEO 文案生成工具</title>
+<!-- 引入字体 -->
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<!-- 引入 Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com"></script>
+<!-- 引入 Icons (使用 Lucide 图标库) -->
+<script src="https://unpkg.com/lucide@latest"></script>
+
+<style>
+  /* 滚动条美化 */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+  
+  body { font-family: 'Inter', sans-serif; }
+  .lucide { vertical-align: middle; }
+
+  /* 极简呼吸背景 */
+  @keyframes breathe {
+    0%, 100% { opacity: 0.6; }
+    50% { opacity: 0.8; }
+  }
+  .animate-breathe { animation: breathe 8s ease-in-out infinite; }
+  
+  /* Section 拖拽样式 */
+  .sortable-item { transition: all 0.2s ease-in-out; } 
+  /* 移除默认 grab 光标，因为只有手柄可拖 */
+  .sortable-item:active { box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05); transform: scale(1.02); }
+  .sortable-drag { opacity: 0.5; }
+  
+  /* 手柄样式 */
+  .drag-handle { cursor: grab; touch-action: none; }
+  .drag-handle:active { cursor: grabbing; }
+
+  /* 隐藏 number input 箭头 */
+  input[type=number]::-webkit-inner-spin-button, 
+  input[type=number]::-webkit-outer-spin-button { 
+    -webkit-appearance: none; margin: 0; 
+  }
+
+  /* 错误状态样式 */
+  .input-error {
+      border-color: #ef4444 !important; /* red-500 */
+      box-shadow: 0 0 0 1px #ef4444 !important;
+  }
+  .shake {
+      animation: shake 0.5s cubic-bezier(.36,.07,.19,.97) both;
+  }
+  @keyframes shake {
+      10%, 90% { transform: translate3d(-1px, 0, 0); }
+      20%, 80% { transform: translate3d(2px, 0, 0); }
+      30%, 50%, 70% { transform: translate3d(-4px, 0, 0); }
+      40%, 60% { transform: translate3d(4px, 0, 0); }
+  }
+</style>
+</head>
+<body class="bg-slate-50 min-h-screen p-3 md:p-8 relative text-slate-800 flex flex-col items-center overflow-x-hidden">
+
+<!-- 背景装饰 -->
+<div class="fixed inset-0 overflow-hidden pointer-events-none -z-10 bg-slate-50">
+  <div class="absolute top-0 left-0 w-[70vw] h-[70vw] bg-[radial-gradient(circle_at_top_left,rgba(216,180,254,0.3)_0%,transparent_60%)] animate-breathe"></div>
+  <div class="absolute bottom-0 right-0 w-[70vw] h-[70vw] bg-[radial-gradient(circle_at_bottom_right,rgba(191,219,254,0.3)_0%,transparent_60%)] animate-breathe" style="animation-delay: 4s;"></div>
+  <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-full bg-[radial-gradient(circle,rgba(255,255,255,0.8)_0%,transparent_100%)]"></div>
+</div>
+
+<section class="container max-w-[95%] 2xl:max-w-[1600px] w-full transition-all duration-300">
+  <div class="bg-white/70 rounded-[32px] border border-white/80 shadow-[0_4px_24px_rgba(0,0,0,0.02)] p-6 md:p-10 relative overflow-hidden ring-1 ring-white/60 min-h-[85vh] flex flex-col">
+    
+    <!-- 标题区 (已简化) -->
+    <div class="flex flex-col items-center justify-center mb-6 border-b border-slate-200/60 pb-4 relative z-10">
+      <div class="flex items-center gap-2">
+        <i data-lucide="pen-tool" class="w-6 h-6 text-indigo-600 drop-shadow-sm"></i>
+        <h1 class="text-xl font-bold text-slate-800 tracking-tight">SEO 营销文案生成器</h1>
+      </div>
+    </div>
+
+    <!-- 主功能区域 -->
+    <div class="flex-1 flex flex-col lg:flex-row gap-8 relative z-10">
+      <!-- 左侧：输入控制区 -->
+      <div class="lg:w-2/5 xl:w-1/3 flex flex-col gap-6">
+        <div class="bg-white/50 rounded-2xl p-6 border border-slate-200/50 shadow-lg flex flex-col gap-4 sticky top-0">
+            
+            <h2 class="text-xl font-bold text-slate-800 mb-2 flex items-center gap-2">
+                <i data-lucide="settings-2" class="w-5 h-5 text-indigo-500"></i> 输入与配置
+            </h2>
+
+            <!-- 0. API Key Input -->
+            <div>
+                <label class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Gemini API Key (Worker)</label>
+                <input id="geminiApiKey" type="password" placeholder="sk-..." class="w-full h-11 px-4 bg-white/80 border border-transparent rounded-xl text-slate-700 text-sm focus:bg-white focus:ring-2 focus:ring-indigo-200 transition-all outline-none shadow-sm font-mono">
+            </div>
+
+            <!-- 1. 核心关键词 -->
+            <div>
+                <label class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">核心关键词 (Core Keyword)</label>
+                <input id="coreKeyword" type="text" placeholder="例如：智能写作助手" class="w-full h-11 px-4 bg-white/80 border border-transparent rounded-xl text-slate-700 text-sm focus:bg-white focus:ring-2 focus:ring-indigo-200 transition-all outline-none shadow-sm">
+            </div>
+            
+            <!-- 2. 次要关键词 -->
+            <div>
+                <label class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">次要关键词 (每行一个)</label>
+                <textarea id="secondaryKeywords" rows="5" placeholder="例如：
+SEO优化
+内容创作
+AI工具" class="w-full p-3 bg-white/80 border border-transparent rounded-xl text-slate-700 placeholder-slate-400 focus:bg-white focus:ring-2 focus:ring-indigo-200 transition-all outline-none shadow-sm resize-y text-sm leading-relaxed"></textarea>
+            </div>
+
+            <!-- 3. 关键词密度 & 品牌名称 -->
+            <div class="grid grid-cols-2 gap-3">
+                <div>
+                    <label class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">密度目标 (%)</label>
+                    <input id="densityTarget" type="number" min="0.1" max="10" step="0.1" value="2" class="w-full h-11 px-4 text-center bg-white/80 border border-transparent rounded-xl text-slate-700 text-sm focus:bg-white focus:ring-2 focus:ring-indigo-200 transition-all outline-none shadow-sm">
+                </div>
+                <div>
+                    <label class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">品牌名称</label>
+                    <input id="brandName" type="text" placeholder="例如：WriterPro" class="w-full h-11 px-4 bg-white/80 border border-transparent rounded-xl text-slate-700 text-sm focus:bg-white focus:ring-2 focus:ring-indigo-200 transition-all outline-none shadow-sm">
+                </div>
+            </div>
+
+            <!-- 新增：SEO Metadata 选项 -->
+            <div class="bg-indigo-50/50 border border-indigo-100 p-3 rounded-xl flex items-center gap-3">
+                <input type="checkbox" id="includeSeoMetadata" class="w-5 h-5 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500" checked>
+                <label for="includeSeoMetadata" class="text-sm font-bold text-indigo-700 select-none cursor-pointer">
+                    生成 SEO Metadata (Title, Description)
+                </label>
+            </div>
+
+            <!-- 4 & 6. Section 种类与顺序 -->
+            <div>
+                <label class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">所需 Section 种类与顺序 (可拖拽)</label>
+                <div id="sectionList" class="bg-white/80 rounded-xl border border-slate-200/50 p-3 flex flex-col gap-2">
+                    <!-- Section Items will be populated here -->
+                </div>
+            </div>
+
+            <!-- 7. 自定义提示词 -->
+            <div>
+                <label class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">自定义提示词 (可选)</label>
+                <textarea id="customPrompt" rows="3" placeholder="例如：要求文案语气轻松有趣，面向年轻设计师群体。" class="w-full p-3 bg-white/80 border border-transparent rounded-xl text-slate-700 placeholder-slate-400 focus:bg-white focus:ring-2 focus:ring-indigo-200 transition-all outline-none shadow-sm resize-y text-sm"></textarea>
+            </div>
+
+            <!-- 错误提示信息 -->
+            <div id="errorMsg" class="hidden text-red-500 text-xs font-bold text-center bg-red-50 p-2 rounded-lg border border-red-100"></div>
+
+            <!-- 操作按钮 -->
+            <div class="pt-2">
+                <button id="generateBtn" class="w-full h-12 rounded-xl bg-indigo-600 text-white font-bold shadow-lg shadow-indigo-200 hover:bg-indigo-700 hover:shadow-indigo-300 active:scale-[0.98] transition-all flex items-center justify-center gap-2 text-base disabled:opacity-50 disabled:cursor-not-allowed">
+                    <i data-lucide="sparkles" class="w-5 h-5"></i> 生成 SEO 文案
+                </button>
+            </div>
+
+            <!-- 状态栏 -->
+            <div id="status" class="text-center text-sm font-medium text-slate-500 pt-1">
+                请填写必要信息并点击生成
+            </div>
+        </div>
+      </div>
+
+      <!-- 右侧：输出区 -->
+      <div class="lg:w-3/5 xl:w-2/3 flex flex-col gap-5">
+         <div class="bg-white/50 rounded-2xl border border-white/60 shadow-inner p-6 flex flex-col min-h-[500px]">
+            <div class="flex justify-between items-center mb-6 border-b border-slate-200/60 pb-3">
+                <h2 class="text-xl font-bold text-slate-800 flex items-center gap-2">
+                   <div class="p-1.5 bg-emerald-100/80 rounded-lg text-emerald-700"><i data-lucide="file-text" class="w-4 h-4"></i></div>
+                   文案生成结果
+                </h2>
+                <button id="checkDensityBtn" class="px-4 py-2 rounded-full bg-yellow-500 text-white font-semibold text-sm shadow-md shadow-yellow-200 hover:bg-yellow-600 active:scale-[0.98] transition-all flex items-center gap-2 disabled:opacity-50" disabled>
+                    <i data-lucide="tally-3" class="w-4 h-4"></i> 检查关键词密度
+                </button>
+            </div>
+         
+            <!-- 关键词密度结果展示区 -->
+            <div id="densityResult" class="hidden bg-yellow-50 border border-yellow-200 rounded-xl p-4 mb-4 text-sm text-yellow-800"></div>
+
+            <!-- 文案输出区 -->
+            <div id="outputArea" class="flex flex-col gap-6 overflow-y-auto pr-2 custom-scroll flex-1 content-start">
+                 <div class="flex flex-col items-center justify-center text-slate-400 h-64 gap-3">
+                     <i data-lucide="layout-dashboard" class="w-10 h-10 opacity-50"></i>
+                     <p class="text-sm">生成的文案将按 Section 顺序显示在这里。</p>
+                 </div>
+            </div>
+         </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer class="relative z-10 text-center text-slate-400 text-xs font-medium py-6">
+  © 2025 SEO Writer — Powered by Gemini
+</footer>
+
+<script>
+lucide.createIcons();
+
+// =================================================================
+// 核心配置与状态
+// =================================================================
+// **请替换为您部署的 Cloudflare Worker URL**
+const WORKER_ENDPOINT = 'https://seo-writer.ne0s0u1-pd.workers.dev'; 
+
+const SECTION_DEFAULTS = [
+    { id: 'hero', label: 'Hero', active: false },
+    { id: 'showcase', label: 'Showcase', active: true },
+    { id: 'whyChooseUs', label: 'Why Choose Us', active: true, options: { count: 3, max: 9 }, icon: 'thumbs-up' },
+    { id: 'howItWork', label: 'How it Work', active: true }, 
+    { id: 'features', label: 'Features', active: true, options: { count: 4, max: 9 }, icon: 'layers-3' },
+    { id: 'faq', label: 'FAQ', active: true, options: { count: 5, max: 9 }, icon: 'help-circle' },
+    { id: 'cta', label: 'CTA', active: true },
+    { id: 'howToUse', label: 'How to use', active: false },
+    { id: 'whoCanBenefit', label: 'Who Can Benefit', active: false, options: { count: 3, max: 9 }, icon: 'users' },
+];
+
+let sectionStates = JSON.parse(JSON.stringify(SECTION_DEFAULTS));
+let generatedCopy = null;
+
+const el = {
+    sectionList: document.getElementById('sectionList'),
+    generateBtn: document.getElementById('generateBtn'),
+    outputArea: document.getElementById('outputArea'),
+    status: document.getElementById('status'),
+    coreKeyword: document.getElementById('coreKeyword'),
+    secondaryKeywords: document.getElementById('secondaryKeywords'),
+    densityTarget: document.getElementById('densityTarget'),
+    brandName: document.getElementById('brandName'),
+    customPrompt: document.getElementById('customPrompt'),
+    checkDensityBtn: document.getElementById('checkDensityBtn'),
+    densityResult: document.getElementById('densityResult'),
+    geminiApiKey: document.getElementById('geminiApiKey'),
+    includeSeoMetadata: document.getElementById('includeSeoMetadata'),
+    errorMsg: document.getElementById('errorMsg'), // 新增错误提示区
+};
+
+// API Key 持久化
+el.geminiApiKey.value = localStorage.getItem("gemini_api_key") || "";
+el.geminiApiKey.addEventListener("input", ()=>localStorage.setItem("gemini_api_key", el.geminiApiKey.value));
+
+// =================================================================
+// Section 渲染与拖拽逻辑
+// =================================================================
+function renderSectionList() {
+    el.sectionList.innerHTML = '';
+    sectionStates.forEach(sec => {
+        const item = document.createElement('div');
+        item.className = 'sortable-item bg-white/70 p-3 rounded-lg border border-slate-100 shadow-sm';
+        
+        // 默认不可拖动，只有按住手柄时才开启
+        item.draggable = false; 
+        
+        item.dataset.id = sec.id;
+        
+        const hasOptions = sec.options;
+        const count = hasOptions ? sec.options.count : 0;
+        const max = hasOptions ? sec.options.max : 0;
+
+        // **修改点 1**: 将 oninput 拆分为 oninput (实时存数据) 和 onblur (离焦时校验并修正 UI)
+        item.innerHTML = `
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2 flex-1">
+                    <!-- 独立的拖拽手柄 -->
+                    <div class="drag-handle p-1.5 hover:bg-slate-100 rounded-md text-slate-400 transition-colors" title="按住拖动排序">
+                        <i data-lucide="grip-vertical" class="w-4 h-4 pointer-events-none"></i>
+                    </div>
+                    <input type="checkbox" id="check-${sec.id}" class="w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500 cursor-pointer" ${sec.active ? 'checked' : ''} onchange="toggleSection('${sec.id}', this.checked)">
+                    <label for="check-${sec.id}" class="text-sm font-medium text-slate-700 select-none cursor-pointer flex-1">${sec.label}</label>
+                </div>
+                ${hasOptions ? `
+                    <div class="flex items-center gap-2 text-xs text-slate-500">
+                        <span class="font-medium text-slate-600">Count:</span>
+                        <input type="number" min="1" max="${max}" value="${count}" 
+                               class="w-12 h-6 px-1 text-center bg-white border border-slate-300 rounded-md text-slate-700 text-xs focus:ring-indigo-200 outline-none transition-all ${sec.active ? '' : 'opacity-50 cursor-not-allowed'}" 
+                               oninput="updateOptionCount('${sec.id}', this.value, false)" 
+                               onblur="updateOptionCount('${sec.id}', this.value, true)"
+                               id="count-input-${sec.id}" ${sec.active ? '' : 'disabled'}>
+                    </div>
+                ` : ''}
+            </div>
+        `;
+        el.sectionList.appendChild(item);
+    });
+    lucide.createIcons();
+    addDragAndDropListeners();
+}
+
+function toggleSection(id, active) {
+    const sec = sectionStates.find(s => s.id === id);
+    if (sec) {
+        sec.active = active;
+        if (sec.options) {
+            const inputEl = document.getElementById(`count-input-${id}`);
+            if (inputEl) {
+                inputEl.disabled = !active;
+                inputEl.classList.toggle('opacity-50', !active);
+                inputEl.classList.toggle('cursor-not-allowed', !active);
+            }
+        }
+    }
+}
+
+// **修改点 2**: 拆分逻辑，isBlur=true 时才强制更新 DOM
+function updateOptionCount(id, value, isBlur) {
+    const sec = sectionStates.find(s => s.id === id);
+    if (sec && sec.options) {
+        // 1. 更新数据模型 (允许临时非法值，保证用户输入流畅)
+        if (value !== "") {
+            sec.options.count = parseInt(value);
+        } else {
+            // 如果输入框为空，暂存为 0 或保持原值，等待 blur 修正
+            // 这里暂存为 0，方便逻辑判断
+            sec.options.count = 0;
+        }
+
+        // 2. 只有在失去焦点时 (isBlur=true) 才执行严格校验并强制回写 DOM
+        if (isBlur) {
+            let count = parseInt(value);
+            const max = sec.options.max;
+            
+            if (isNaN(count) || count < 1) count = 1;
+            if (count > max) count = max;
+            
+            // 更新最终的合法数据
+            sec.options.count = count;
+            
+            // 强制更新输入框显示
+            const inputEl = document.getElementById(`count-input-${id}`);
+            if (inputEl) {
+                inputEl.value = count;
+            }
+        }
+    }
+}
+
+function addDragAndDropListeners() {
+    let dragSrcEl = null;
+
+    function onHandleMouseDown(e) {
+        const item = this.closest('.sortable-item');
+        if (item) {
+            item.draggable = true;
+        }
+    }
+
+    function onHandleMouseUp(e) {
+        const item = this.closest('.sortable-item');
+        if (item) {
+            item.draggable = false;
+        }
+    }
+
+    function handleDragStart(e) {
+        dragSrcEl = this;
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', this.dataset.id);
+        this.classList.add('sortable-drag');
+    }
+
+    function handleDragOver(e) {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        return false;
+    }
+
+    function handleDragEnter(e) { this.classList.add('ring-2', 'ring-indigo-300'); }
+    function handleDragLeave(e) { this.classList.remove('ring-2', 'ring-indigo-300'); }
+
+    function handleDrop(e) {
+        e.stopPropagation();
+        this.classList.remove('ring-2', 'ring-indigo-300');
+        this.draggable = false;
+        
+        if (dragSrcEl !== this) {
+            const dragId = dragSrcEl.dataset.id;
+            const dropId = this.dataset.id;
+            const dragIndex = sectionStates.findIndex(s => s.id === dragId);
+            const dropIndex = sectionStates.findIndex(s => s.id === dropId);
+            const [removed] = sectionStates.splice(dragIndex, 1);
+            sectionStates.splice(dropIndex, 0, removed);
+            renderSectionList();
+        }
+        return false;
+    }
+
+    function handleDragEnd(e) {
+        this.classList.remove('sortable-drag');
+        this.draggable = false;
+        document.querySelectorAll('.sortable-item').forEach(item => item.classList.remove('ring-2', 'ring-indigo-300'));
+    }
+
+    document.querySelectorAll('.sortable-item').forEach(item => {
+        item.addEventListener('dragstart', handleDragStart);
+        item.addEventListener('dragenter', handleDragEnter);
+        item.addEventListener('dragover', handleDragOver);
+        item.addEventListener('dragleave', handleDragLeave);
+        item.addEventListener('drop', handleDrop);
+        item.addEventListener('dragend', handleDragEnd);
+
+        const handle = item.querySelector('.drag-handle');
+        if (handle) {
+            handle.addEventListener('mousedown', onHandleMouseDown);
+            handle.addEventListener('mouseup', onHandleMouseUp);
+            handle.addEventListener('mouseleave', onHandleMouseUp);
+        }
+    });
+}
+
+renderSectionList();
+
+// =================================================================
+// 关键词密度计算
+// =================================================================
+function calculateKeywordDensity(allText, coreKeyword, secondaryKeywordsRaw, targetDensity) {
+    const matches = allText.match(/[a-zA-Z0-9_\-]+|[\u4e00-\u9fa5]/g) || [];
+    const totalWords = matches.length;
+    
+    const keywordList = [];
+    if (coreKeyword.trim()) keywordList.push({ word: coreKeyword.trim(), type: 'core' });
+    const secondaryList = secondaryKeywordsRaw.split('\n').map(k => k.trim()).filter(k => k.length > 0);
+    secondaryList.forEach(k => keywordList.push({ word: k, type: 'secondary' }));
+
+    const densityData = [];
+    const lowerText = allText.toLowerCase();
+
+    keywordList.forEach(item => {
+        const word = item.word;
+        const lowerWord = word.toLowerCase();
+        let count = 0;
+        let pos = 0;
+        while (true) {
+            const foundPos = lowerText.indexOf(lowerWord, pos);
+            if (foundPos === -1) break;
+            count++;
+            pos = foundPos + 1;
+        }
+        
+        const density = totalWords > 0 ? ((count / totalWords) * 100).toFixed(2) : 0;
+        let status = '合适';
+        if (item.type === 'core') {
+             if (density < targetDensity - 0.5) status = '偏低';
+             else if (density > targetDensity + 1.5) status = '偏高';
+        } else {
+             if (density > 0) status = '已覆盖';
+             else status = '未出现';
+        }
+
+        densityData.push({
+            keyword: word,
+            type: item.type === 'core' ? '核心' : '次要',
+            count: count,
+            density: density,
+            status: status
+        });
+    });
+
+    return { totalWords, densityData };
+}
+
+function displayDensityResult(allText) {
+    const coreKeyword = el.coreKeyword.value;
+    const secondaryKeywordsRaw = el.secondaryKeywords.value;
+    const targetDensity = parseFloat(el.densityTarget.value) || 2.0;
+
+    if (!coreKeyword && !secondaryKeywordsRaw.trim()) {
+        el.densityResult.innerHTML = `<p class="text-red-500">请先输入核心关键词或次要关键词。</p>`;
+        el.densityResult.classList.remove('hidden');
+        return;
+    }
+    
+    const result = calculateKeywordDensity(allText, coreKeyword, secondaryKeywordsRaw, targetDensity);
+
+    let html = `
+        <h3 class="font-bold text-slate-800 mb-3 flex items-center gap-2">
+            <i data-lucide="bar-chart-2" class="w-4 h-4 text-indigo-600"></i> 
+            关键词密度检查报告
+        </h3>
+        <div class="mb-3 text-xs text-slate-500 bg-slate-100 p-2 rounded">
+            统计规则：英文单词以空格分隔，中文按字数统计，已排除标点符号。<br>
+            计算公式：(关键词出现次数 / 文章总词数) * 100%
+        </div>
+        <p class="text-sm mb-3">
+            文案总词数: <strong class="text-indigo-700">${result.totalWords}</strong>
+        </p>
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm text-left text-slate-600">
+                <thead class="text-xs text-slate-700 uppercase bg-slate-100">
+                    <tr>
+                        <th class="px-3 py-2 rounded-l-lg">类型</th>
+                        <th class="px-3 py-2">关键词</th>
+                        <th class="px-3 py-2 text-center">次数</th>
+                        <th class="px-3 py-2 text-center">密度</th>
+                        <th class="px-3 py-2 rounded-r-lg text-right">状态</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100">
+    `;
+
+    result.densityData.forEach(data => {
+        const statusColor = data.status === '合适' || data.status === '已覆盖' ? 'text-green-600' : data.status === '未出现' ? 'text-slate-400' : 'text-orange-500';
+        const typeBadge = data.type === '核心' ? '<span class="px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700 text-[10px] font-bold">CORE</span>' : '<span class="px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 text-[10px]">SEC</span>';
+        html += `
+            <tr class="hover:bg-slate-50 transition-colors">
+                <td class="px-3 py-2">${typeBadge}</td>
+                <td class="px-3 py-2 font-medium text-slate-800">${data.keyword}</td>
+                <td class="px-3 py-2 text-center font-mono">${data.count}</td>
+                <td class="px-3 py-2 text-center font-mono">${data.density}%</td>
+                <td class="px-3 py-2 text-right font-bold ${statusColor}">${data.status}</td>
+            </tr>
+        `;
+    });
+    html += `</tbody></table></div>`;
+    el.densityResult.innerHTML = html;
+    el.densityResult.classList.remove('hidden');
+    lucide.createIcons();
+}
+
+// =================================================================
+// Worker Payload & Interaction
+// =================================================================
+// 辅助函数：清除错误样式
+function clearErrors() {
+    const inputs = [el.geminiApiKey, el.coreKeyword, el.brandName]; // 次要关键词非必须
+    inputs.forEach(input => input.classList.remove('input-error', 'shake'));
+    el.errorMsg.classList.add('hidden');
+    el.errorMsg.textContent = '';
+}
+
+// 辅助函数：显示错误
+function showError(inputEl, message) {
+    inputEl.classList.add('input-error', 'shake');
+    // 移除 shake 动画类以便下次触发
+    setTimeout(() => inputEl.classList.remove('shake'), 500);
+    
+    el.errorMsg.textContent = `❌ ${message}`;
+    el.errorMsg.classList.remove('hidden');
+}
+
+function getWorkerPayload(rewriteSectionId = null, customRewritePrompt = null) {
+    clearErrors();
+
+    const coreKeyword = el.coreKeyword.value.trim();
+    const secondaryKeywordsRaw = el.secondaryKeywords.value.trim();
+    const secondaryKeywords = secondaryKeywordsRaw.replace(/\n/g, ', ');
+    const brandName = el.brandName.value.trim();
+    let customPrompt = el.customPrompt.value.trim();
+    const densityTarget = parseFloat(el.densityTarget.value) || 2.0;
+    const apiKey = el.geminiApiKey.value.trim();
+    const includeMetadata = el.includeSeoMetadata.checked; 
+
+    // 校验逻辑
+    if (!apiKey) {
+        showError(el.geminiApiKey, "请输入 API Key");
+        el.geminiApiKey.focus();
+        return null;
+    }
+    if (!coreKeyword) {
+        showError(el.coreKeyword, "请输入核心关键词");
+        el.coreKeyword.focus();
+        return null;
+    }
+    if (!brandName) {
+        showError(el.brandName, "请输入品牌名称");
+        el.brandName.focus();
+        return null;
+    }
+
+    let sectionsConfig = [];
+    
+    if (rewriteSectionId) {
+        // **重写模式**
+        const sec = sectionStates.find(s => s.id === rewriteSectionId) || (rewriteSectionId === 'seo_metadata' ? { id: 'seo_metadata', label: 'SEO Metadata' } : null);
+        
+        if (!sec) {
+            console.error("找不到要重写的 Section:", rewriteSectionId);
+            return null;
+        }
+        
+        sectionsConfig = [{
+            id: sec.id,
+            label: sec.label,
+            options: sec.options // 传递 options 以便后端获取 count
+        }];
+        
+        if (customRewritePrompt) {
+            customPrompt = `【重写指令】针对 ${sec.label} 进行修改：${customRewritePrompt}。` + (customPrompt ? ` (原有要求：${customPrompt})` : '');
+        }
+        
+        if (rewriteSectionId === 'seo_metadata') {
+             sectionsConfig = [{ id: 'seo_metadata', label: 'SEO Metadata', count: 0 }];
+        } 
+
+    } else {
+        // **正常生成模式**
+        const activeSections = sectionStates.filter(s => s.active);
+        if (activeSections.length === 0) {
+            el.errorMsg.textContent = "❌ 请至少选择一个 Section！";
+            el.errorMsg.classList.remove('hidden');
+            return null;
+        }
+        
+        sectionsConfig = activeSections.map(sec => ({
+            id: sec.id,
+            label: sec.label,
+            options: sec.options 
+        }));
+    }
+
+    return {
+        coreKeyword, secondaryKeywords, brandName, densityTarget,
+        customPrompt, sections: sectionsConfig, apiKey, 
+        includeMetadata: rewriteSectionId ? false : includeMetadata 
+    };
+}
+
+async function runGenerator() {
+    const payload = getWorkerPayload();
+    if (!payload) return;
+
+    el.generateBtn.disabled = true;
+    el.generateBtn.innerHTML = `<i data-lucide="loader-2" class="w-5 h-5 animate-spin"></i> 正在请求 Worker...`;
+    el.status.textContent = '正在发送配置到 Cloudflare Worker...';
+    el.outputArea.innerHTML = '';
+    el.densityResult.classList.add('hidden');
+    el.checkDensityBtn.disabled = true;
+    generatedCopy = null;
+
+    try {
+        const res = await fetch(WORKER_ENDPOINT, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload) 
+        });
+
+        if (!res.ok) {
+             const errorBody = await res.text().catch(() => 'No response body');
+             throw new Error(`Worker 返回错误！状态码: ${res.status}. 详情: ${errorBody.substring(0, 100)}`);
+        }
+
+        const response = await res.json();
+        if (response.error) throw new Error(response.error);
+
+        generatedCopy = response;
+        renderCopyOutput(response);
+
+        const allText = Object.entries(response)
+            .filter(([key, value]) => key !== 'seo_metadata')
+            .map(([key, value]) => value)
+            .join('\n\n');
+
+        el.checkDensityBtn.disabled = false;
+        el.checkDensityBtn.onclick = () => displayDensityResult(allText);
+        el.status.textContent = '✅ 文案生成成功！请检查右侧结果。';
+
+    } catch (e) {
+        console.error("Worker 交互错误:", e);
+        el.status.textContent = `❌ 文案生成失败：${e.message}`;
+    } finally {
+        el.generateBtn.disabled = false;
+        el.generateBtn.innerHTML = `<i data-lucide="sparkles" class="w-5 h-5"></i> 生成 SEO 文案`;
+        lucide.createIcons();
+    }
+}
+
+// **新增：重写 Section 逻辑**
+async function rewriteSection(sectionId, promptInputId, cardId) {
+    const promptInput = document.getElementById(promptInputId);
+    const customRewritePrompt = promptInput.value.trim();
+    
+    if (!customRewritePrompt) {
+        alert("请输入修改要求！");
+        return;
+    }
+    
+    const cardEl = document.getElementById(cardId);
+    const contentContainer = cardEl.querySelector('.prose');
+    const originalContent = contentContainer.innerHTML; // 备份，以便失败恢复（可选）
+
+    // UI Loading 状态
+    contentContainer.innerHTML = `<div class="flex items-center gap-2 text-indigo-600 py-4"><i data-lucide="loader-2" class="w-5 h-5 animate-spin"></i> 正在重写...</div>`;
+    lucide.createIcons();
+
+    // 获取 Payload (仅针对该 Section)
+    const payload = getWorkerPayload(sectionId, customRewritePrompt);
+    if (!payload) {
+        contentContainer.innerHTML = originalContent; // 恢复
+        return;
+    }
+
+    try {
+        const res = await fetch(WORKER_ENDPOINT, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload) 
+        });
+
+        if (!res.ok) throw new Error(`Worker error: ${res.status}`);
+        
+        const response = await res.json();
+        if (response.error) throw new Error(response.error);
+
+        // 获取新内容 (Worker 现在直接返回 { [sectionId]: "..." })
+        let newContent = response[sectionId];
+        
+        if (!newContent) {
+             throw new Error("重写返回内容为空");
+        }
+
+        // 更新全局数据 generatedCopy
+        if (generatedCopy) {
+            generatedCopy[sectionId] = newContent;
+        } else {
+            generatedCopy = { [sectionId]: newContent };
+        }
+
+        // 更新 UI
+        contentContainer.innerHTML = marked.parse(newContent);
+        
+        // 更新隐藏的 Textarea 用于复制
+        const copyTextarea = cardEl.querySelector('textarea.hidden');
+        if (copyTextarea) copyTextarea.value = newContent;
+
+        // 关闭输入框
+        toggleRewriteInput(cardId + '-rewrite-box');
+
+    } catch (e) {
+        console.error("Rewrite error:", e);
+        alert(`重写失败: ${e.message}`);
+        contentContainer.innerHTML = originalContent; // 恢复
+    }
+}
+
+function toggleRewriteInput(elementId) {
+    const el = document.getElementById(elementId);
+    if (el) {
+        el.classList.toggle('hidden');
+        // 自动聚焦
+        if (!el.classList.contains('hidden')) {
+            const input = el.querySelector('textarea');
+            if(input) input.focus();
+        }
+    }
+}
+
+// **修改点：添加复制按钮和逻辑**
+function renderCopyOutput(copyData) {
+    el.outputArea.innerHTML = '';
+    
+    // 辅助函数：生成卡片内容
+    const createCard = (id, title, content, icon, isMeta = false) => {
+        const card = document.createElement('div');
+        const borderClass = isMeta 
+            ? 'bg-indigo-50/50 border border-indigo-200 rounded-xl p-5 shadow-sm hover:shadow-md transition-all border-l-4 border-l-indigo-500'
+            : 'bg-white/70 border border-slate-200 rounded-xl p-5 shadow-lg hover:shadow-xl transition-all';
+        
+        const titleColor = isMeta ? 'text-indigo-700' : 'text-indigo-700';
+        const iconEl = `<i data-lucide="${icon}" class="w-5 h-5"></i>`;
+
+        // 唯一ID
+        const uniqueId = Math.random().toString(36).substr(2, 9);
+        const contentId = `content-${uniqueId}`;
+        const cardId = `card-${uniqueId}`;
+        const rewriteBoxId = `${cardId}-rewrite-box`;
+        const promptInputId = `${cardId}-prompt-input`;
+
+        card.id = cardId;
+        card.className = borderClass;
+        card.innerHTML = `
+            <div class="flex justify-between items-center mb-3 border-b pb-2 border-indigo-100/50">
+                <h3 class="text-lg font-bold ${titleColor} flex items-center gap-2">
+                    ${iconEl} ${title}
+                </h3>
+                <div class="flex gap-2">
+                    <button onclick="toggleRewriteInput('${rewriteBoxId}')" class="text-xs bg-white hover:bg-indigo-50 border border-slate-200 text-slate-600 px-2 py-1 rounded transition-colors flex items-center gap-1" title="重写此部分">
+                        <i data-lucide="refresh-cw" class="w-3 h-3"></i> 重写
+                    </button>
+                    <button onclick="copyText('${contentId}', this)" class="text-xs bg-white hover:bg-indigo-50 border border-slate-200 text-slate-600 px-2 py-1 rounded transition-colors flex items-center gap-1" title="复制内容">
+                        <i data-lucide="copy" class="w-3 h-3"></i> 复制
+                    </button>
+                </div>
+            </div>
+            
+            <!-- 重写输入框 (默认隐藏) -->
+            <div id="${rewriteBoxId}" class="hidden mb-4 bg-slate-50 p-3 rounded-lg border border-indigo-100">
+                <label class="block text-xs font-bold text-slate-500 mb-1">修改要求 (可选):</label>
+                <textarea id="${promptInputId}" class="w-full p-2 text-sm border border-slate-300 rounded mb-2 focus:ring-2 focus:ring-indigo-200 outline-none" rows="2" placeholder="例如：语气更专业一点，或者增加更多细节..."></textarea>
+                <div class="flex justify-end gap-2">
+                    <button onclick="toggleRewriteInput('${rewriteBoxId}')" class="text-xs text-slate-500 hover:text-slate-700 px-3 py-1">取消</button>
+                    <button onclick="rewriteSection('${id}', '${promptInputId}', '${cardId}')" class="text-xs bg-indigo-600 text-white px-3 py-1 rounded hover:bg-indigo-700 transition-colors flex items-center gap-1">
+                        <i data-lucide="sparkles" class="w-3 h-3"></i> 确认重写
+                    </button>
+                </div>
+            </div>
+
+            <div class="prose max-w-none text-slate-800 text-sm leading-relaxed">
+                ${marked.parse(content)}
+            </div>
+            <!-- 隐藏的文本域用于复制原始内容 -->
+            <textarea id="${contentId}" class="hidden">${content}</textarea>
+        `;
+        return card;
+    };
+
+    // 优先渲染 SEO Metadata
+    if (copyData['seo_metadata']) {
+        let metaContentRaw = copyData['seo_metadata'];
+        if (typeof metaContentRaw === 'object' && metaContentRaw !== null) {
+             metaContentRaw = "```json\n" + JSON.stringify(metaContentRaw, null, 2) + "\n```";
+        }
+        const metaContent = String(metaContentRaw || "");
+        el.outputArea.appendChild(createCard('seo_metadata', 'SEO Metadata', metaContent, 'search', true));
+    }
+
+    // 渲染其他 Section
+    sectionStates.filter(s => s.active).forEach(sec => {
+        let contentRaw = copyData[sec.id];
+        if (typeof contentRaw === 'object' && contentRaw !== null) {
+             contentRaw = "```json\n" + JSON.stringify(contentRaw, null, 2) + "\n```";
+        }
+        const content = String(contentRaw || '【文案缺失或生成失败】');
+        el.outputArea.appendChild(createCard(sec.id, sec.label, content, getSectionIcon(sec.id)));
+    });
+    lucide.createIcons();
+}
+
+// **新增：全局复制函数**
+window.copyText = function(elementId, btn) {
+    const text = document.getElementById(elementId).value;
+    
+    // 使用 Clipboard API 或 fallback
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(() => showCopySuccess(btn));
+    } else {
+        // Fallback for older browsers or http
+        const textArea = document.createElement("textarea");
+        textArea.value = text;
+        document.body.appendChild(textArea);
+        textArea.select();
+        document.execCommand("copy");
+        document.body.removeChild(textArea);
+        showCopySuccess(btn);
+    }
+};
+
+function showCopySuccess(btn) {
+    const originalHtml = btn.innerHTML;
+    btn.innerHTML = `<i data-lucide="check" class="w-3 h-3"></i> 已复制`;
+    btn.classList.add('text-green-600', 'border-green-200', 'bg-green-50');
+    lucide.createIcons();
+    
+    setTimeout(() => {
+        btn.innerHTML = originalHtml;
+        btn.classList.remove('text-green-600', 'border-green-200', 'bg-green-50');
+        lucide.createIcons();
+    }, 2000);
+}
+
+function getSectionIcon(id) {
+    switch (id) {
+        case 'hero': return 'star';
+        case 'showcase': return 'award';
+        case 'howItWork':
+        case 'howToUse': return 'sliders';
+        case 'features': return 'layers-3';
+        case 'whyChooseUs': return 'thumbs-up';
+        case 'whoCanBenefit': return 'users';
+        case 'faq': return 'help-circle';
+        case 'cta': return 'mouse-pointer-click';
+        default: return 'bookmark';
+    }
+}
+
+el.generateBtn.addEventListener('click', runGenerator);
+
+const markedScript = document.createElement('script');
+markedScript.src = 'https://cdn.jsdelivr.net/npm/marked@13.0.0/marked.min.js';
+markedScript.onload = () => {
+    marked.setOptions({ gfm: true, breaks: true, sanitize: true });
+};
+document.head.appendChild(markedScript);
+
+el.checkDensityBtn.addEventListener('click', () => {
+    if (!generatedCopy) {
+        alert('请先生成文案！');
+        return;
+    }
+    const allText = Object.entries(generatedCopy)
+        .filter(([key, value]) => key !== 'seo_metadata')
+        .map(([key, value]) => value)
+        .join('\n\n');
+    displayDensityResult(allText);
+});
+</script>
+</body>
+</html>
