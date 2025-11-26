@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>AI 配图生成器</title>
+<!-- 引入字体 -->
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<!-- 引入 Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com"></script>
+<!-- 引入 Icons (使用 Lucide 图标库) -->
+<script src="https://unpkg.com/lucide@latest"></script>
+<!-- 引入 Marked -->
+<script src="https://cdn.jsdelivr.net/npm/marked@13.0.0/marked.min.js"></script>
+
+<style>
+  /* 滚动条美化 */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+  
+  body { font-family: 'Inter', sans-serif; }
+  .lucide { vertical-align: middle; }
+
+  /* 极简呼吸背景 */
+  @keyframes breathe {
+    0%, 100% { opacity: 0.6; }
+    50% { opacity: 0.8; }
+  }
+  .animate-breathe { animation: breathe 8s ease-in-out infinite; }
+</style>
+</head>
+<body class="bg-slate-50 min-h-screen p-3 md:p-8 relative text-slate-800 flex flex-col items-center overflow-x-hidden">
+
+<!-- 背景装饰 -->
+<div class="fixed inset-0 overflow-hidden pointer-events-none -z-10 bg-slate-50">
+  <div class="absolute top-0 left-0 w-[70vw] h-[70vw] bg-[radial-gradient(circle_at_top_left,rgba(216,180,254,0.3)_0%,transparent_60%)] animate-breathe"></div>
+  <div class="absolute bottom-0 right-0 w-[70vw] h-[70vw] bg-[radial-gradient(circle_at_bottom_right,rgba(191,219,254,0.3)_0%,transparent_60%)] animate-breathe" style="animation-delay: 4s;"></div>
+  <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-full bg-[radial-gradient(circle,rgba(255,255,255,0.8)_0%,transparent_100%)]"></div>
+</div>
+
+<section class="container max-w-[95%] 2xl:max-w-[1600px] w-full transition-all duration-300">
+  <div class="bg-white/70 rounded-[32px] border border-white/80 shadow-[0_4px_24px_rgba(0,0,0,0.02)] p-6 md:p-10 relative overflow-hidden ring-1 ring-white/60 min-h-[85vh] flex flex-col">
+    
+    <!-- 标题区 -->
+    <div class="flex flex-col items-center justify-center mb-6 border-b border-slate-200/60 pb-4 relative z-10">
+      <div class="flex items-center gap-2">
+        <i data-lucide="image" class="w-6 h-6 text-purple-600 drop-shadow-sm"></i>
+        <h1 class="text-xl font-bold text-slate-800 tracking-tight">AI 配图生成器</h1>
+      </div>
+    </div>
+
+    <!-- 主功能区域 -->
+    <div class="flex-1 flex flex-col lg:flex-row gap-8 relative z-10 h-full overflow-hidden">
+      
+      <!-- 左侧：文案预览区 (可编辑) -->
+      <div class="lg:w-1/2 flex flex-col gap-4 h-[70vh]">
+        <div class="flex items-center justify-between">
+            <h2 class="text-lg font-bold text-slate-800 flex items-center gap-2">
+                <i data-lucide="file-text" class="w-5 h-5 text-indigo-500"></i> 文案内容参考
+            </h2>
+            <span class="text-xs text-slate-400">可直接修改文案内容</span>
+        </div>
+        
+        <div id="copyPreviewArea" class="flex-1 overflow-y-auto custom-scroll bg-white/50 rounded-2xl border border-slate-200 p-4 space-y-4">
+            <!-- 文案内容将通过 JS 注入 -->
+            <div class="flex flex-col items-center justify-center text-slate-400 h-full gap-3">
+                <i data-lucide="loader-2" class="w-8 h-8 animate-spin opacity-50"></i>
+                <p class="text-sm">正在加载文案数据...</p>
+            </div>
+        </div>
+      </div>
+
+      <!-- 右侧：生图配置与展示区 -->
+      <div class="lg:w-1/2 flex flex-col gap-6 h-[70vh] overflow-y-auto custom-scroll pr-2">
+        
+        <!-- 1. 配置区 -->
+        <div class="bg-white/60 rounded-2xl p-6 border border-slate-200 shadow-sm flex flex-col gap-5">
+            <h2 class="text-lg font-bold text-slate-800 flex items-center gap-2">
+                <i data-lucide="settings" class="w-5 h-5 text-purple-500"></i> 配图设置
+            </h2>
+
+            <!-- Section 选择与参数 -->
+            <div id="sectionConfigArea" class="space-y-3">
+                <!-- 动态生成 Section 选项 -->
+            </div>
+
+            <!-- 风格提示词 -->
+            <div>
+                <label class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">整体风格基调 (Style Prompt)</label>
+                <input id="stylePrompt" type="text" placeholder="例如：SaaS, Minimalist, Tech blue, High quality, Vector art" class="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-purple-200 outline-none shadow-sm">
+            </div>
+
+            <!-- 生成提示词按钮 -->
+            <button id="genPromptBtn" class="w-full h-10 rounded-xl bg-indigo-600 text-white font-bold shadow-lg shadow-indigo-100 hover:bg-indigo-700 active:scale-[0.98] transition-all flex items-center justify-center gap-2 text-sm">
+                <i data-lucide="sparkles" class="w-4 h-4"></i> 1. 生成绘画提示词 (Prompt)
+            </button>
+        </div>
+
+        <!-- 2. 提示词确认区 -->
+        <div id="promptReviewArea" class="bg-white/60 rounded-2xl p-6 border border-slate-200 shadow-sm flex flex-col gap-4 hidden">
+            <h2 class="text-lg font-bold text-slate-800 flex items-center gap-2">
+                <i data-lucide="edit-3" class="w-5 h-5 text-orange-500"></i> 确认提示词
+            </h2>
+            <div id="promptList" class="space-y-4">
+                <!-- 动态插入生成的提示词输入框 -->
+            </div>
+            
+            <!-- 生图按钮 -->
+            <button id="genImageBtn" class="w-full h-12 rounded-xl bg-purple-600 text-white font-bold shadow-lg shadow-purple-200 hover:bg-purple-700 active:scale-[0.98] transition-all flex items-center justify-center gap-2 text-base mt-2">
+                <i data-lucide="palette" class="w-5 h-5"></i> 2. 开始生成图片
+            </button>
+        </div>
+
+        <!-- 3. 图片展示区 -->
+        <div id="imageGalleryArea" class="grid grid-cols-2 gap-4">
+            <!-- 图片卡片 -->
+        </div>
+
+      </div>
+    </div>
+  </div>
+</section>
+
+<script>
+lucide.createIcons();
+
+// 状态数据
+let copyData = {};
+let sectionStates = [];
+let imagePrompts = {}; // 存储每个 Section 生成的 Prompt
+
+// 初始化加载数据
+window.addEventListener('DOMContentLoaded', () => {
+    const rawCopy = localStorage.getItem('seo_generated_copy');
+    const rawSections = localStorage.getItem('seo_section_states');
+
+    if (!rawCopy) {
+        document.getElementById('copyPreviewArea').innerHTML = `
+            <div class="text-center text-slate-400 p-10">
+                <p>未找到文案数据，请先在首页生成文案。</p>
+                <a href="seo_copywriter_tool.html" class="text-indigo-600 underline mt-2 block">返回首页</a>
+            </div>
+        `;
+        return;
+    }
+
+    copyData = JSON.parse(rawCopy);
+    sectionStates = rawSections ? JSON.parse(rawSections) : [];
+
+    renderCopyPreview();
+    renderConfigArea();
+});
+
+// 1. 渲染左侧文案预览
+function renderCopyPreview() {
+    const container = document.getElementById('copyPreviewArea');
+    container.innerHTML = '';
+
+    // 过滤掉 Metadata
+    const sectionsToShow = sectionStates.filter(s => s.active && copyData[s.id]);
+
+    sectionsToShow.forEach(sec => {
+        const content = copyData[sec.id];
+        const div = document.createElement('div');
+        div.className = "bg-white p-4 rounded-xl border border-slate-100 shadow-sm";
+        
+        // 标题
+        div.innerHTML = `
+            <div class="flex justify-between items-center mb-2">
+                <span class="text-xs font-bold text-indigo-500 uppercase tracking-wider">${sec.label}</span>
+            </div>
+            <!-- 使用 textarea 让内容可编辑，用于参考 -->
+            <textarea id="content-${sec.id}" class="w-full p-2 text-sm text-slate-700 border border-slate-200 rounded-lg bg-slate-50/50 focus:bg-white focus:ring-1 focus:ring-indigo-200 outline-none resize-y min-h-[150px] leading-relaxed">${content}</textarea>
+        `;
+        container.appendChild(div);
+    });
+}
+
+// 2. 渲染右侧配置区
+function renderConfigArea() {
+    const container = document.getElementById('sectionConfigArea');
+    container.innerHTML = '';
+
+    const sectionsToShow = sectionStates.filter(s => s.active && copyData[s.id]);
+
+    sectionsToShow.forEach(sec => {
+        const row = document.createElement('div');
+        row.className = "flex items-center justify-between bg-slate-50 p-3 rounded-lg border border-slate-100";
+        
+        row.innerHTML = `
+            <div class="flex items-center gap-3">
+                <input type="checkbox" id="check-img-${sec.id}" class="w-4 h-4 text-purple-600 rounded border-gray-300 focus:ring-purple-500" checked>
+                <label for="check-img-${sec.id}" class="text-sm font-medium text-slate-700 select-none cursor-pointer">${sec.label}</label>
+            </div>
+            <div class="flex items-center gap-2">
+                <select id="ratio-${sec.id}" class="text-xs border border-slate-200 rounded px-2 py-1 bg-white focus:outline-none focus:border-purple-300">
+                    <option value="1:1">1:1 (方图)</option>
+                    <option value="3:2">3:2 (横图)</option>
+                    <option value="2:3">2:3 (竖图)</option>
+                </select>
+                <select id="count-${sec.id}" class="text-xs border border-slate-200 rounded px-2 py-1 bg-white focus:outline-none focus:border-purple-300">
+                    <option value="1">1 张</option>
+                    <option value="2">2 张</option>
+                    <option value="4">4 张</option>
+                </select>
+            </div>
+        `;
+        container.appendChild(row);
+    });
+}
+
+// 3. 生成提示词逻辑 (模拟)
+document.getElementById('genPromptBtn').addEventListener('click', async () => {
+    const btn = document.getElementById('genPromptBtn');
+    const stylePrompt = document.getElementById('stylePrompt').value.trim() || "SaaS style, clean, minimalist, modern tech";
+    const reviewArea = document.getElementById('promptReviewArea');
+    const promptList = document.getElementById('promptList');
+    
+    // 获取勾选的 Sections
+    const selectedSections = sectionStates.filter(s => {
+        const checkbox = document.getElementById(`check-img-${s.id}`);
+        return s.active && checkbox && checkbox.checked;
+    });
+
+    if (selectedSections.length === 0) {
+        alert("请至少勾选一个需要配图的 Section");
+        return;
+    }
+
+    btn.disabled = true;
+    btn.innerHTML = `<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i> 正在生成提示词...`;
+    lucide.createIcons();
+
+    // 模拟异步请求 (此处实际应调用后端 LLM)
+    // 真实逻辑：发送 Section 文案 + 风格 -> 后端 -> 返回 Prompt
+    await new Promise(r => setTimeout(r, 1500)); 
+
+    promptList.innerHTML = '';
+    
+    selectedSections.forEach(sec => {
+        // 模拟生成的 Prompt
+        const content = document.getElementById(`content-${sec.id}`).value.substring(0, 50).replace(/\n/g, " ");
+        const mockPrompt = `Illustration for ${sec.label}, showing concept of "${content}...", ${stylePrompt}, vector art, high quality`;
+        
+        const item = document.createElement('div');
+        item.className = "space-y-1";
+        item.innerHTML = `
+            <div class="flex justify-between text-xs text-slate-500">
+                <span class="font-bold text-slate-700">${sec.label}</span>
+                <span>${document.getElementById(`ratio-${sec.id}`).value}</span>
+            </div>
+            <textarea id="prompt-${sec.id}" class="w-full p-2 text-xs text-slate-600 border border-purple-100 rounded-lg bg-purple-50/30 focus:bg-white focus:ring-1 focus:ring-purple-300 outline-none resize-y min-h-[60px]">${mockPrompt}</textarea>
+        `;
+        promptList.appendChild(item);
+    });
+
+    reviewArea.classList.remove('hidden');
+    btn.disabled = false;
+    btn.innerHTML = `<i data-lucide="sparkles" class="w-4 h-4"></i> 1. 重新生成提示词`;
+    lucide.createIcons();
+    
+    // 滚动到底部
+    reviewArea.scrollIntoView({ behavior: 'smooth' });
+});
+
+// 4. 生图逻辑 (模拟)
+document.getElementById('genImageBtn').addEventListener('click', async () => {
+    const btn = document.getElementById('genImageBtn');
+    const gallery = document.getElementById('imageGalleryArea');
+    
+    btn.disabled = true;
+    btn.innerHTML = `<i data-lucide="loader-2" class="w-5 h-5 animate-spin"></i> 正在绘画中...`;
+    lucide.createIcons();
+
+    // 获取所有生成的 Prompt
+    const inputs = document.querySelectorAll('[id^="prompt-"]');
+    
+    // 模拟生图过程
+    await new Promise(r => setTimeout(r, 3000));
+
+    gallery.innerHTML = ''; // 清空旧图
+
+    inputs.forEach(input => {
+        const secId = input.id.replace('prompt-', '');
+        const promptText = input.value;
+        const count = document.getElementById(`count-${secId}`).value;
+        
+        // 模拟生成 count 张图
+        for(let i=0; i<count; i++) {
+            const imgCard = document.createElement('div');
+            imgCard.className = "relative group rounded-xl overflow-hidden border border-slate-200 shadow-sm aspect-square bg-slate-100";
+            
+            // 使用 Picsum 占位图模拟
+            const randomId = Math.floor(Math.random() * 1000);
+            imgCard.innerHTML = `
+                <img src="https://picsum.photos/seed/${randomId + secId + i}/400/400" class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" alt="${secId}">
+                <div class="absolute bottom-0 left-0 w-full p-2 bg-gradient-to-t from-black/60 to-transparent text-white text-xs opacity-0 group-hover:opacity-100 transition-opacity">
+                    ${secId.toUpperCase()} - ${i+1}
+                </div>
+                <button class="absolute top-2 right-2 p-1.5 bg-white/90 rounded-lg text-slate-600 opacity-0 group-hover:opacity-100 transition-opacity hover:text-purple-600 shadow-sm" title="下载">
+                    <i data-lucide="download" class="w-4 h-4"></i>
+                </button>
+            `;
+            gallery.appendChild(imgCard);
+        }
+    });
+
+    btn.disabled = false;
+    btn.innerHTML = `<i data-lucide="palette" class="w-5 h-5"></i> 2. 开始生成图片`;
+    lucide.createIcons();
+    
+    gallery.scrollIntoView({ behavior: 'smooth' });
+});
+
+</script>
+</body>
+</html>
