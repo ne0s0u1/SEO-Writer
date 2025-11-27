@@ -487,7 +487,7 @@ function calculateKeywordDensity(allText, coreKeyword, secondaryKeywordsRaw, tar
         let status = '合适';
         if (item.type === 'core') {
              if (density < targetDensity - 0.5) status = '偏低';
-             else if (density > targetDensity + 1.5) status = '偏高';
+             else if (density > targetDensity + 0.5) status = '偏高';
         } else {
              if (density > 0) status = '已覆盖';
              else status = '未出现';
@@ -1019,6 +1019,7 @@ function copyAllContent() {
 </script>
 </body>
 </html>
+
 
 
 
